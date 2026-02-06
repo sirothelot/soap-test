@@ -1,4 +1,0 @@
-com\example\server\SoapServer.class
-com\example\service\CalculatorService.class
-com\example\client\SoapClient.class
-com\example\service\CalculatorServiceImpl.class
