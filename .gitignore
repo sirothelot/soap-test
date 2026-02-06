@@ -16,4 +16,4 @@ Thumbs.db
 .DS_Store
 
 # Maven wrapper downloads (the scripts are fine, not the JARs)
-.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/maven-wrapper.jar
