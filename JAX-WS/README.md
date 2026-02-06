@@ -269,9 +269,9 @@ Client                          Server
   │                               │  username/password
 ```
 
-| File                       | Role                                          |
-| -------------------------- | --------------------------------------------- |
-| `SecurityConstants.java`   | Shared credentials (username, password)        |
+| File                         | Role                                         |
+| ---------------------------- | -------------------------------------------- |
+| `SecurityConstants.java`     | Shared credentials (username, password)      |
 | `ClientSecurityHandler.java` | Builds & injects UsernameToken into requests |
 | `ServerSecurityHandler.java` | Extracts & validates UsernameToken on server |
 

@@ -234,10 +234,10 @@ template.setInterceptors(new ClientInterceptor[]{interceptor});
 
 ### JAX-WS vs Spring-WS Security Comparison
 
-| Aspect           | JAX-WS                                 | Spring-WS                          |
-| ---------------- | -------------------------------------- | ---------------------------------- |
-| **Library**      | Built-in SOAPHandler API               | Apache WSS4J (via spring-ws-security) |
-| **Server-side**  | ~100 lines hand-written XML parsing    | ~15 lines of interceptor config    |
-| **Client-side**  | ~100 lines hand-written XML building   | ~5 lines of interceptor config     |
-| **Approach**     | Manual SOAP header manipulation        | Declarative configuration          |
-| **Extensibility**| Write more handler code                | Change interceptor properties      |
+| Aspect            | JAX-WS                               | Spring-WS                             |
+| ----------------- | ------------------------------------ | ------------------------------------- |
+| **Library**       | Built-in SOAPHandler API             | Apache WSS4J (via spring-ws-security) |
+| **Server-side**   | ~100 lines hand-written XML parsing  | ~15 lines of interceptor config       |
+| **Client-side**   | ~100 lines hand-written XML building | ~5 lines of interceptor config        |
+| **Approach**      | Manual SOAP header manipulation      | Declarative configuration             |
+| **Extensibility** | Write more handler code              | Change interceptor properties         |
