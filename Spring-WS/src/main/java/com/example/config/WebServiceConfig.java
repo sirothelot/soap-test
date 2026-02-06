@@ -1,5 +1,6 @@
 package com.example.config;
 
+import com.example.security.SecurityConstants;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -7,10 +8,16 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.ws.config.annotation.EnableWs;
 import org.springframework.ws.config.annotation.WsConfigurerAdapter;
+import org.springframework.ws.server.EndpointInterceptor;
+import org.springframework.ws.soap.security.wss4j2.Wss4jSecurityInterceptor;
+import org.springframework.ws.soap.security.wss4j2.callback.SimplePasswordValidationCallbackHandler;
 import org.springframework.ws.transport.http.MessageDispatcherServlet;
 import org.springframework.ws.wsdl.wsdl11.DefaultWsdl11Definition;
 import org.springframework.xml.xsd.SimpleXsdSchema;
 import org.springframework.xml.xsd.XsdSchema;
+
+import java.util.List;
+import java.util.Properties;
 
 /**
  * Spring Web Services Configuration.
@@ -77,5 +84,90 @@ public class WebServiceConfig extends WsConfigurerAdapter {
     @Bean
     public XsdSchema calculatorSchema() {
         return new SimpleXsdSchema(new ClassPathResource("calculator.xsd"));
+    }
+
+    // =========================================================================
+    //  WS-SECURITY CONFIGURATION
+    // =========================================================================
+
+    /**
+     * Register the WS-Security interceptor in the endpoint chain.
+     *
+     * COMPARISON WITH JAX-WS:
+     * =======================
+     * JAX-WS:    Handlers are added to a Binding's handler chain manually.
+     *              Binding binding = endpoint.getBinding();
+     *              binding.getHandlerChain().add(new ServerSecurityHandler());
+     *
+     * Spring-WS: Interceptors are registered by overriding addInterceptors().
+     *            Spring automatically applies them to all @Endpoint methods.
+     */
+    @Override
+    public void addInterceptors(List<EndpointInterceptor> interceptors) {
+        interceptors.add(securityInterceptor());
+    }
+
+    /**
+     * WS-Security Interceptor (server-side) - validates incoming credentials.
+     *
+     * This is the Spring-WS equivalent of our JAX-WS ServerSecurityHandler,
+     * but instead of manually parsing XML, we just set properties:
+     *
+     * COMPARISON:
+     * ===========
+     * JAX-WS (ServerSecurityHandler.java):
+     *   - Manually iterates through SOAP header elements
+     *   - Finds <wsse:Security> -> <wsse:UsernameToken> -> <wsse:Username>/<wsse:Password>
+     *   - Compares values against expected credentials
+     *   - ~130 lines of XML parsing code
+     *
+     * Spring-WS (this bean):
+     *   - Set validationActions = "UsernameToken"
+     *   - Provide a callback handler with valid username/password pairs
+     *   - WSS4J handles ALL the XML parsing automatically
+     *   - ~15 lines of configuration code
+     *
+     * WHAT "validationActions" MEANS:
+     *   "UsernameToken" = check for username/password in the security header
+     *   "Timestamp"     = check for timestamp (prevents replay attacks)
+     *   "Signature"     = verify digital signature
+     *   "Encrypt"       = decrypt encrypted content
+     *   You can combine them: "UsernameToken Timestamp"
+     */
+    @Bean
+    public Wss4jSecurityInterceptor securityInterceptor() {
+        Wss4jSecurityInterceptor interceptor = new Wss4jSecurityInterceptor();
+
+        // Tell WSS4J to look for a UsernameToken in incoming messages
+        interceptor.setValidationActions("UsernameToken");
+
+        // Provide the callback handler that knows valid username/password pairs
+        interceptor.setValidationCallbackHandler(securityCallbackHandler());
+
+        return interceptor;
+    }
+
+    /**
+     * Password validation callback handler.
+     *
+     * When WSS4J finds a UsernameToken in an incoming message, it calls this
+     * callback to check if the credentials are valid.
+     *
+     * SimplePasswordValidationCallbackHandler takes a Properties object
+     * where keys=usernames, values=passwords.
+     *
+     * JAX-WS equivalent: The if-statement in ServerSecurityHandler.handleMessage()
+     *   that compares username.equals("alice") && password.equals("secret123")
+     *
+     * IN PRODUCTION: Replace this with a callback handler that checks
+     * a database, LDAP, or calls an identity provider.
+     */
+    @Bean
+    public SimplePasswordValidationCallbackHandler securityCallbackHandler() {
+        SimplePasswordValidationCallbackHandler handler = new SimplePasswordValidationCallbackHandler();
+        Properties users = new Properties();
+        users.setProperty(SecurityConstants.USERNAME, SecurityConstants.PASSWORD);
+        handler.setUsers(users);
+        return handler;
     }
 }

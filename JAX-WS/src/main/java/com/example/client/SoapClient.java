@@ -1,9 +1,14 @@
 package com.example.client;
 
+import com.example.security.ClientSecurityHandler;
 import com.example.service.CalculatorService;
+import jakarta.xml.ws.Binding;
+import jakarta.xml.ws.BindingProvider;
 import jakarta.xml.ws.Service;
+import jakarta.xml.ws.handler.Handler;
 import javax.xml.namespace.QName;
 import java.net.URL;
+import java.util.List;
 
 /**
  * SOAP Web Service Client
@@ -93,6 +98,19 @@ public class SoapClient {
             // This proxy converts method calls to SOAP messages
             System.out.println("Step 3: Getting service proxy (port)...");
             CalculatorService calculator = service.getPort(CalculatorService.class);
+            
+            // Step 4: Register the WS-Security handler on the client side.
+            // This handler automatically adds a <wsse:Security> header with
+            // our username and password to every SOAP request we send.
+            //
+            // WITHOUT this handler: requests are sent WITHOUT credentials -> server rejects
+            // WITH this handler:    requests include credentials -> server accepts
+            System.out.println("Step 4: Registering WS-Security handler...");
+            Binding binding = ((BindingProvider) calculator).getBinding();
+            @SuppressWarnings("rawtypes")
+            List<Handler> handlerChain = binding.getHandlerChain();
+            handlerChain.add(new ClientSecurityHandler());
+            binding.setHandlerChain(handlerChain);
             
             System.out.println("[OK] Connected successfully!");
             System.out.println();

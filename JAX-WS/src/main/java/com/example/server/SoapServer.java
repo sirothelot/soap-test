@@ -1,7 +1,11 @@
 package com.example.server;
 
+import com.example.security.ServerSecurityHandler;
 import com.example.service.CalculatorServiceImpl;
+import jakarta.xml.ws.Binding;
 import jakarta.xml.ws.Endpoint;
+import jakarta.xml.ws.handler.Handler;
+import java.util.List;
 
 /**
  * SOAP Web Service Server/Publisher
@@ -48,6 +52,21 @@ public class SoapServer {
         // Publish the service at the specified URL
         // This creates an HTTP server and makes the service available
         endpoint = Endpoint.publish(SERVICE_URL, serviceImpl);
+        
+        // Register the WS-Security handler on the server side.
+        // This handler checks every incoming request for valid credentials.
+        //
+        // HOW HANDLER CHAINS WORK:
+        // Request arrives -> Handler1 -> Handler2 -> ... -> @WebService method
+        // Response returns <- Handler1 <- Handler2 <- ... <- @WebService method
+        //
+        // Our security handler runs BEFORE the service method,
+        // rejecting unauthenticated requests early.
+        Binding binding = endpoint.getBinding();
+        @SuppressWarnings("rawtypes")
+        List<Handler> handlerChain = binding.getHandlerChain();
+        handlerChain.add(new ServerSecurityHandler());
+        binding.setHandlerChain(handlerChain);
         
         System.out.println("[OK] Service published successfully!");
         System.out.println();

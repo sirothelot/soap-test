@@ -55,6 +55,23 @@
             <groupId>wsdl4j</groupId>
             <artifactId>wsdl4j</artifactId>
         </dependency>
+
+        <!--
+            Spring WS Security - adds WS-Security support.
+            
+            Under the hood this uses Apache WSS4J, the industry-standard
+            library for WS-Security in Java. Spring-WS wraps it into
+            easy-to-configure interceptor beans.
+            
+            COMPARISON WITH JAX-WS:
+            JAX-WS:    You manually build/parse WS-Security XML in a SOAPHandler.
+            Spring-WS: You configure a Wss4jSecurityInterceptor bean and it handles
+                       all the XML parsing, validation, and header creation for you.
+        -->
+        <dependency>
+            <groupId>org.springframework.ws</groupId>
+            <artifactId>spring-ws-security</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

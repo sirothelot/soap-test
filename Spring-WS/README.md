@@ -31,6 +31,11 @@ CalculatorServiceImpl.java (@WebService)  CalculatorEndpoint.java (@Endpoint)
 SoapServer.java            (Endpoint)     SoapApplication.java    (Spring Boot)
                                           WebServiceConfig.java   (@Configuration)
 SoapClient.java            (proxy)        SoapClient.java         (WebServiceTemplate)
+
+Security:
+SecurityConstants.java     (shared)       SecurityConstants.java  (shared)
+ClientSecurityHandler.java (SOAPHandler)  Wss4jSecurityInterceptor (built-in)
+ServerSecurityHandler.java (SOAPHandler)  Wss4jSecurityInterceptor (built-in)
 ```
 
 ## Project Structure
@@ -44,7 +49,9 @@ Spring-WS/
     ├── java/com/example/
     │   ├── SoapApplication.java           # Spring Boot entry point
     │   ├── config/
-    │   │   └── WebServiceConfig.java      # WSDL + servlet config
+    │   │   └── WebServiceConfig.java      # WSDL + servlet + security config
+    │   ├── security/
+    │   │   └── SecurityConstants.java     # Shared credentials
     │   ├── service/
     │   │   └── CalculatorEndpoint.java    # @Endpoint (handles SOAP requests)
     │   └── client/
@@ -176,3 +183,61 @@ req.setA(10); req.setB(5);
 AddResponse resp = (AddResponse) template.marshalSendAndReceive(req);
 int result = resp.getSum();
 ```
+
+## WS-Security (UsernameToken)
+
+This project includes WS-Security authentication using **Apache WSS4J** via the `spring-ws-security` library.
+
+### What Happens
+
+Every SOAP message gets a `<wsse:Security>` header with a username and password:
+
+```xml
+<S:Envelope>
+  <S:Header>
+    <wsse:Security>
+      <wsse:UsernameToken>
+        <wsse:Username>alice</wsse:Username>
+        <wsse:Password>secret123</wsse:Password>
+      </wsse:UsernameToken>
+    </wsse:Security>
+  </S:Header>
+  <S:Body>...</S:Body>
+</S:Envelope>
+```
+
+### How It Works in Spring-WS
+
+Spring-WS uses **interceptors** (configured as Spring beans) instead of hand-written handlers:
+
+**Server side** (`WebServiceConfig.java`):
+
+```java
+@Bean
+public Wss4jSecurityInterceptor securityInterceptor() {
+    Wss4jSecurityInterceptor interceptor = new Wss4jSecurityInterceptor();
+    interceptor.setValidationActions("UsernameToken");
+    interceptor.setValidationCallbackHandler(securityCallbackHandler());
+    return interceptor;
+}
+```
+
+**Client side** (`SoapClient.java`):
+
+```java
+Wss4jSecurityInterceptor interceptor = new Wss4jSecurityInterceptor();
+interceptor.setSecurementActions("UsernameToken");
+interceptor.setSecurementUsername("alice");
+interceptor.setSecurementPassword("secret123");
+template.setInterceptors(new ClientInterceptor[]{interceptor});
+```
+
+### JAX-WS vs Spring-WS Security Comparison
+
+| Aspect           | JAX-WS                                 | Spring-WS                          |
+| ---------------- | -------------------------------------- | ---------------------------------- |
+| **Library**      | Built-in SOAPHandler API               | Apache WSS4J (via spring-ws-security) |
+| **Server-side**  | ~100 lines hand-written XML parsing    | ~15 lines of interceptor config    |
+| **Client-side**  | ~100 lines hand-written XML building   | ~5 lines of interceptor config     |
+| **Approach**     | Manual SOAP header manipulation        | Declarative configuration          |
+| **Extensibility**| Write more handler code                | Change interceptor properties      |

@@ -52,17 +52,21 @@ Think of WSDL as an API documentation in machine-readable format.
 ## Project Structure
 
 ```
-soap-test/
+JAX-WS/
 ├── pom.xml                           # Maven build configuration
 ├── README.md                         # This file
 └── src/main/java/com/example/
     ├── service/
-    │   ├── CalculatorService.java    # Service Interface (SEI)
+    │   ├── CalculatorService.java     # Service Interface (SEI)
     │   └── CalculatorServiceImpl.java # Service Implementation
+    ├── security/
+    │   ├── SecurityConstants.java     # Shared credentials
+    │   ├── ClientSecurityHandler.java # Adds UsernameToken to requests
+    │   └── ServerSecurityHandler.java # Validates UsernameToken on server
     ├── server/
-    │   └── SoapServer.java           # Publishes the web service
+    │   └── SoapServer.java            # Publishes the web service
     └── client/
-        └── SoapClient.java           # Consumes the web service
+        └── SoapClient.java            # Consumes the web service
 ```
 
 ## How to Run
@@ -226,6 +230,54 @@ When you call `calc.add(5, 3)`:
 7. **Returns `8`** from the `add()` method call
 
 All this XML handling is automatic!
+
+## WS-Security (UsernameToken)
+
+This project includes a working WS-Security example that adds **username/password authentication** to every SOAP message.
+
+### What is WS-Security?
+
+WS-Security is a standard for adding security **inside** the SOAP message itself (message-level security), as opposed to relying only on HTTPS (transport-level security).
+
+```xml
+<S:Envelope>
+  <S:Header>
+    <wsse:Security>
+      <wsse:UsernameToken>
+        <wsse:Username>alice</wsse:Username>
+        <wsse:Password>secret123</wsse:Password>
+      </wsse:UsernameToken>
+    </wsse:Security>
+  </S:Header>
+  <S:Body>
+    <add><a>5</a><b>3</b></add>
+  </S:Body>
+</S:Envelope>
+```
+
+### How It Works in JAX-WS
+
+JAX-WS uses **SOAPHandler** classes that intercept messages in a handler chain:
+
+```
+Client                          Server
+  │                               │
+  │  ClientSecurityHandler        │  ServerSecurityHandler
+  │  adds <wsse:Security>         │  reads <wsse:Security>
+  │  header to outgoing     ───►  │  header from incoming
+  │  messages                     │  messages, validates
+  │                               │  username/password
+```
+
+| File                       | Role                                          |
+| -------------------------- | --------------------------------------------- |
+| `SecurityConstants.java`   | Shared credentials (username, password)        |
+| `ClientSecurityHandler.java` | Builds & injects UsernameToken into requests |
+| `ServerSecurityHandler.java` | Extracts & validates UsernameToken on server |
+
+### Key Point
+
+In JAX-WS, you write the XML manipulation **by hand** (~200 lines of handler code). Compare this to Spring-WS, which does the same thing with ~15 lines of configuration using Apache WSS4J.
 
 ## SOAP vs REST
 

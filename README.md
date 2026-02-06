@@ -9,6 +9,7 @@ Side-by-side comparison of two approaches to building the **same SOAP web servic
 | **Service**   | `@WebService` interface + implementation | `@Endpoint` with `@PayloadRoot` methods      |
 | **Client**    | Proxy via `Service.getPort()`            | `WebServiceTemplate.marshalSendAndReceive()` |
 | **Server**    | `Endpoint.publish()` (JDK HTTP server)   | Embedded Tomcat (Spring Boot)                |
+| **Security**  | Hand-written `SOAPHandler` (~200 LOC)    | `Wss4jSecurityInterceptor` (~15 LOC config)  |
 
 Both projects implement a **Calculator** service with four operations: add, subtract, multiply, and divide.
 

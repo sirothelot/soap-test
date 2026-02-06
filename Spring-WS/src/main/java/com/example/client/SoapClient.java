@@ -1,8 +1,11 @@
 package com.example.client;
 
+import com.example.security.SecurityConstants;
 import com.example.service.gen.*;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 import org.springframework.ws.client.core.WebServiceTemplate;
+import org.springframework.ws.client.support.interceptor.ClientInterceptor;
+import org.springframework.ws.soap.security.wss4j2.Wss4jSecurityInterceptor;
 
 /**
  * SOAP Web Service Client (Spring-WS).
@@ -58,6 +61,31 @@ public class SoapClient {
             System.out.println("Step 2: Creating WebServiceTemplate...");
             WebServiceTemplate template = new WebServiceTemplate(marshaller);
             template.setDefaultUri(SERVICE_URL);
+
+            // Step 3: Add WS-Security to outgoing requests
+            // This interceptor automatically adds a <wsse:Security> header
+            // with our username and password to every SOAP message we send.
+            //
+            // COMPARISON WITH JAX-WS:
+            // =======================
+            // JAX-WS:    Write a ClientSecurityHandler that manually builds
+            //            <wsse:Security> XML elements (~100 lines of code).
+            // Spring-WS: Configure a Wss4jSecurityInterceptor with 3 properties.
+            //            WSS4J builds the XML header automatically.
+            //
+            // "securementActions" = what to ADD to outgoing messages:
+            //   "UsernameToken" = add username/password header
+            //   "Timestamp"     = add timestamp (server can reject old messages)
+            //   "Signature"     = digitally sign the message
+            //   "Encrypt"       = encrypt the message body
+            System.out.println("Step 3: Configuring WS-Security credentials...");
+            Wss4jSecurityInterceptor securityInterceptor = new Wss4jSecurityInterceptor();
+            securityInterceptor.setSecurementActions("UsernameToken");
+            securityInterceptor.setSecurementUsername(SecurityConstants.USERNAME);
+            securityInterceptor.setSecurementPassword(SecurityConstants.PASSWORD);
+            securityInterceptor.afterPropertiesSet();
+
+            template.setInterceptors(new ClientInterceptor[]{securityInterceptor});
 
             System.out.println("[OK] Connected successfully!");
             System.out.println();
