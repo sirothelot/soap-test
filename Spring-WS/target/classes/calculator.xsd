@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    XML Schema Definition (XSD) for the Calculator Service.
+
+    KEY DIFFERENCE FROM JAX-WS:
+    ===========================
+    In JAX-WS (code-first):
+        You write Java classes/interfaces first, and the WSDL + XSD are generated automatically.
+
+    In Spring-WS (contract-first):
+        You write this XSD first, and Java classes are generated from it (via JAXB).
+        Spring then generates the WSDL from this XSD automatically.
+
+    This XSD defines:
+    - Request and Response types for each operation (add, subtract, multiply, divide)
+    - The data types used (int for inputs, int/double for outputs)
+
+    Naming convention:
+    - Elements ending with "Request" become SOAP request messages
+    - Elements ending with "Response" become SOAP response messages
+    - Spring-WS uses this convention to auto-generate the WSDL
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://service.example.com/"
+           targetNamespace="http://service.example.com/"
+           elementFormDefault="qualified">
+
+    <!-- ==================== ADD ==================== -->
+
+    <xs:element name="addRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="a" type="xs:int"/>
+                <xs:element name="b" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="addResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="sum" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== SUBTRACT ==================== -->
+
+    <xs:element name="subtractRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="a" type="xs:int"/>
+                <xs:element name="b" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="subtractResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="difference" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== MULTIPLY ==================== -->
+
+    <xs:element name="multiplyRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="a" type="xs:int"/>
+                <xs:element name="b" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="multiplyResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="product" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- ==================== DIVIDE ==================== -->
+
+    <xs:element name="divideRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="a" type="xs:int"/>
+                <xs:element name="b" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="divideResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="quotient" type="xs:double"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>
