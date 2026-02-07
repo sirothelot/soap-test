@@ -27,18 +27,23 @@ package com.example.security;
 public class SecurityConstants {
 
     // --- Authentication credentials ---
-    public static final String USERNAME = "alice";
-    public static final String PASSWORD = "secret123";
+    public static final String USERNAME = env("SOAP_USERNAME", "alice");
+    public static final String PASSWORD = env("SOAP_PASSWORD", "secret123");
 
     // --- Keystore aliases (names of keys inside the keystores) ---
     public static final String CLIENT_KEY_ALIAS = "client";
     public static final String SERVER_KEY_ALIAS = "server";
 
     // --- Keystore passwords ---
-    public static final String CLIENT_KEY_PASSWORD = "clientpass";
-    public static final String SERVER_KEY_PASSWORD = "serverpass";
+    public static final String CLIENT_KEY_PASSWORD = env("SOAP_CLIENT_KEY_PASSWORD", "clientpass");
+    public static final String SERVER_KEY_PASSWORD = env("SOAP_SERVER_KEY_PASSWORD", "serverpass");
 
     // --- Crypto properties files ---
     public static final String CLIENT_CRYPTO_PROPERTIES = "client-crypto.properties";
     public static final String SERVER_CRYPTO_PROPERTIES = "server-crypto.properties";
+
+    private static String env(String name, String fallback) {
+        String value = System.getenv(name);
+        return (value == null || value.isBlank()) ? fallback : value;
+    }
 }

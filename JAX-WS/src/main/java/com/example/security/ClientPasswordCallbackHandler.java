@@ -29,10 +29,10 @@ import java.io.IOException;
  *      What happens: WSS4J says "I need to sign this message with the 'client'
  *                    private key. What's the keystore password for that key?"
  *                    We return "clientpass" so WSS4J can read the private key
- *                    from client-keystore.jks and create the digital signature.
+ *                    from client-keystore.p12 and create the digital signature.
  *
  * NOTE: Encryption does NOT need a password callback because:
- *   - Encryption uses the SERVER's PUBLIC key (from client-truststore.jks)
+ *   - Encryption uses the SERVER's PUBLIC key (from client-truststore.p12)
  *   - Public keys are not password-protected in truststores
  *   - WSS4J reads the server's public cert directly, no password needed
  *

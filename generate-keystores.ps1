@@ -24,20 +24,20 @@
 #
 #  This script creates 4 files:
 #
-#    client-keystore.jks   = client's private key + certificate
-#    server-keystore.jks   = server's private key + certificate
-#    client-truststore.jks = server's certificate (client trusts server)
-#    server-truststore.jks = client's certificate (server trusts client)
+#    client-keystore.p12   = client's private key + certificate
+#    server-keystore.p12   = server's private key + certificate
+#    client-truststore.p12 = server's certificate (client trusts server)
+#    server-truststore.p12 = client's certificate (server trusts client)
 #
 #  The flow:
 #
 #    Client sending a request:
-#    1. Signs with client's private key     (from client-keystore.jks)
-#    2. Encrypts with server's public key   (from client-truststore.jks)
+#    1. Signs with client's private key     (from client-keystore.p12)
+#    2. Encrypts with server's public key   (from client-truststore.p12)
 #
 #    Server receiving a request:
-#    1. Decrypts with server's private key  (from server-keystore.jks)
-#    2. Verifies signature with client's public key (from server-truststore.jks)
+#    1. Decrypts with server's private key  (from server-keystore.p12)
+#    2. Verifies signature with client's public key (from server-truststore.p12)
 #
 # ==========================================================================
 
@@ -69,7 +69,7 @@ foreach ($dir in $directories) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
     # Clean up any existing files
-    Remove-Item -Path "$dir/*.jks" -ErrorAction SilentlyContinue
+    Remove-Item -Path "$dir/*.p12" -ErrorAction SilentlyContinue
     Remove-Item -Path "$dir/*.cer" -ErrorAction SilentlyContinue
 
     # -----------------------------------------------------------------------
@@ -82,13 +82,13 @@ foreach ($dir in $directories) {
         -keyalg RSA `
         -keysize 2048 `
         -validity 365 `
-        -keystore "$dir/client-keystore.jks" `
+        -keystore "$dir/client-keystore.p12" `
         -storepass $CLIENT_STORE_PASS `
         -keypass $CLIENT_KEY_PASS `
         -dname "CN=Client, O=Demo, L=Helsinki, C=FI" `
-        -storetype JKS `
+        -storetype PKCS12 `
         2>&1 | Out-Null
-    Write-Host "  [OK] client-keystore.jks created (client's private key + certificate)"
+    Write-Host "  [OK] client-keystore.p12 created (client's private key + certificate)"
 
     # -----------------------------------------------------------------------
     # Step 2: Generate SERVER key pair (private key + self-signed certificate)
@@ -100,13 +100,13 @@ foreach ($dir in $directories) {
         -keyalg RSA `
         -keysize 2048 `
         -validity 365 `
-        -keystore "$dir/server-keystore.jks" `
+        -keystore "$dir/server-keystore.p12" `
         -storepass $SERVER_STORE_PASS `
         -keypass $SERVER_KEY_PASS `
         -dname "CN=Server, O=Demo, L=Helsinki, C=FI" `
-        -storetype JKS `
+        -storetype PKCS12 `
         2>&1 | Out-Null
-    Write-Host "  [OK] server-keystore.jks created (server's private key + certificate)"
+    Write-Host "  [OK] server-keystore.p12 created (server's private key + certificate)"
 
     # -----------------------------------------------------------------------
     # Step 3: Export CLIENT certificate (public key only)
@@ -115,7 +115,7 @@ foreach ($dir in $directories) {
     Write-Host "Step 3: Exporting client certificate..." -ForegroundColor Yellow
     & keytool -exportcert `
         -alias $CLIENT_ALIAS `
-        -keystore "$dir/client-keystore.jks" `
+        -keystore "$dir/client-keystore.p12" `
         -storepass $CLIENT_STORE_PASS `
         -file "$dir/client.cer" `
         2>&1 | Out-Null
@@ -128,7 +128,7 @@ foreach ($dir in $directories) {
     Write-Host "Step 4: Exporting server certificate..." -ForegroundColor Yellow
     & keytool -exportcert `
         -alias $SERVER_ALIAS `
-        -keystore "$dir/server-keystore.jks" `
+        -keystore "$dir/server-keystore.p12" `
         -storepass $SERVER_STORE_PASS `
         -file "$dir/server.cer" `
         2>&1 | Out-Null
@@ -142,13 +142,13 @@ foreach ($dir in $directories) {
     Write-Host "Step 5: Creating client truststore (with server's cert)..." -ForegroundColor Yellow
     & keytool -importcert `
         -alias $SERVER_ALIAS `
-        -keystore "$dir/client-truststore.jks" `
+        -keystore "$dir/client-truststore.p12" `
         -storepass $CLIENT_STORE_PASS `
         -file "$dir/server.cer" `
         -noprompt `
-        -storetype JKS `
+        -storetype PKCS12 `
         2>&1 | Out-Null
-    Write-Host "  [OK] client-truststore.jks created (trusts server)"
+    Write-Host "  [OK] client-truststore.p12 created (trusts server)"
 
     # -----------------------------------------------------------------------
     # Step 6: Import CLIENT cert into SERVER truststore
@@ -158,13 +158,13 @@ foreach ($dir in $directories) {
     Write-Host "Step 6: Creating server truststore (with client's cert)..." -ForegroundColor Yellow
     & keytool -importcert `
         -alias $CLIENT_ALIAS `
-        -keystore "$dir/server-truststore.jks" `
+        -keystore "$dir/server-truststore.p12" `
         -storepass $SERVER_STORE_PASS `
         -file "$dir/client.cer" `
         -noprompt `
-        -storetype JKS `
+        -storetype PKCS12 `
         2>&1 | Out-Null
-    Write-Host "  [OK] server-truststore.jks created (trusts client)"
+    Write-Host "  [OK] server-truststore.p12 created (trusts client)"
 
     # Clean up temporary certificate files
     Remove-Item -Path "$dir/client.cer"
@@ -172,10 +172,10 @@ foreach ($dir in $directories) {
 
     Write-Host ""
     Write-Host "  Summary of $dir :" -ForegroundColor Green
-    Write-Host "    client-keystore.jks    - client's private key (signs outgoing messages)"
-    Write-Host "    client-truststore.jks  - server's public cert (encrypts FOR server)"
-    Write-Host "    server-keystore.jks    - server's private key (decrypts incoming messages)"
-    Write-Host "    server-truststore.jks  - client's public cert (verifies client signatures)"
+    Write-Host "    client-keystore.p12    - client's private key (signs outgoing messages)"
+    Write-Host "    client-truststore.p12  - server's public cert (encrypts FOR server)"
+    Write-Host "    server-keystore.p12    - server's private key (decrypts incoming messages)"
+    Write-Host "    server-truststore.p12  - client's public cert (verifies client signatures)"
 }
 
 Write-Host ""

@@ -15,5 +15,9 @@
 Thumbs.db
 .DS_Store
 
+# Keystores (contain private keys — regenerate with generate-keystores.ps1)
+**/keystores/*.p12
+**/keystores/*.jks
+
 # Maven wrapper downloads (the scripts are fine, not the JARs)
 **/.mvn/wrapper/maven-wrapper.jar

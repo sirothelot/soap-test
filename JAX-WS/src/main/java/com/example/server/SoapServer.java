@@ -4,6 +4,8 @@ import com.example.security.SecurityConstants;
 import com.example.security.ServerPasswordCallbackHandler;
 import com.example.service.CalculatorService;
 import com.example.service.CalculatorServiceImpl;
+import org.apache.cxf.interceptor.LoggingInInterceptor;
+import org.apache.cxf.interceptor.LoggingOutInterceptor;
 import org.apache.cxf.jaxws.JaxWsServerFactoryBean;
 import org.apache.cxf.ws.security.wss4j.WSS4JInInterceptor;
 import org.apache.wss4j.dom.handler.WSHandlerConstants;
@@ -66,6 +68,10 @@ public class SoapServer {
         factory.setAddress(SERVICE_URL);
         factory.setServiceBean(new CalculatorServiceImpl());
 
+        // Log raw SOAP messages for learning/debugging
+        factory.getInInterceptors().add(new LoggingInInterceptor());
+        factory.getOutInterceptors().add(new LoggingOutInterceptor());
+
         // =====================================================
         // WS-SECURITY CONFIGURATION (server-side / inbound)
         // =====================================================
@@ -103,7 +109,7 @@ public class SoapServer {
         // SIGNATURE VERIFICATION: Where to find the CLIENT's public certificate
         // to verify that the digital signature is genuine.
         //
-        // This properties file points to server-truststore.jks which contains
+        // This properties file points to server-truststore.p12 which contains
         // the client's certificate. (We trust the client's public key.)
         //
         // COMPARISON WITH SPRING-WS:
@@ -115,7 +121,7 @@ public class SoapServer {
         // DECRYPTION: Where to find the SERVER's private key
         // to decrypt the message body.
         //
-        // This properties file points to server-keystore.jks which contains
+        // This properties file points to server-keystore.p12 which contains
         // the server's private key. Only we can decrypt messages encrypted
         // with our public key.
         //

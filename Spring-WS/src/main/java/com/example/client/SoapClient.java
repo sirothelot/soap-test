@@ -7,7 +7,11 @@ import org.apache.wss4j.common.crypto.CryptoFactory;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 import org.springframework.ws.client.core.WebServiceTemplate;
 import org.springframework.ws.client.support.interceptor.ClientInterceptor;
+import org.springframework.ws.soap.client.SoapFaultClientException;
 import org.springframework.ws.soap.security.wss4j2.Wss4jSecurityInterceptor;
+import org.springframework.ws.transport.http.HttpUrlConnectionMessageSender;
+
+import java.time.Duration;
 
 /**
  * SOAP Web Service Client (Spring-WS).
@@ -63,6 +67,12 @@ public class SoapClient {
             System.out.println("Step 2: Creating WebServiceTemplate...");
             WebServiceTemplate template = new WebServiceTemplate(marshaller);
             template.setDefaultUri(SERVICE_URL);
+
+            // Basic timeouts to keep demos from hanging forever
+            HttpUrlConnectionMessageSender messageSender = new HttpUrlConnectionMessageSender();
+            messageSender.setConnectionTimeout(Duration.ofSeconds(5));
+            messageSender.setReadTimeout(Duration.ofSeconds(5));
+            template.setMessageSender(messageSender);
 
             // Step 3: Add WS-Security to outgoing requests
             // This interceptor automatically adds three security layers:
@@ -235,6 +245,30 @@ public class SoapClient {
             divReq2.setB(7);
             DivideResponse divResp2 = (DivideResponse) template.marshalSendAndReceive(divReq2);
             System.out.println("Result:  " + divResp2.getQuotient());
+            System.out.println();
+
+            // SOAP Fault demo: divide by zero
+            // The server throws DivisionByZeroException, which Spring-WS maps
+            // to a SOAP Fault via @SoapFault(faultCode = FaultCode.CLIENT).
+            // This shows how SOAP reports errors — as structured XML Faults,
+            // not HTTP error codes like REST.
+            System.out.println("========================================");
+            System.out.println("   SOAP Fault Demo (divide by zero)");
+            System.out.println("========================================");
+            System.out.println();
+
+            System.out.println("Calling: divide(10, 0)");
+            try {
+                DivideRequest divByZero = new DivideRequest();
+                divByZero.setA(10);
+                divByZero.setB(0);
+                template.marshalSendAndReceive(divByZero);
+                System.out.println("ERROR: Should have thrown a SOAP Fault!");
+            } catch (SoapFaultClientException e) {
+                System.out.println("[OK] Got expected SOAP Fault:");
+                System.out.println("  Fault code:   " + e.getSoapFault().getFaultCode());
+                System.out.println("  Fault string: " + e.getFaultStringOrReason());
+            }
             System.out.println();
 
             System.out.println("========================================");

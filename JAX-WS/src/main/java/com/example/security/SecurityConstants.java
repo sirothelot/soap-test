@@ -50,16 +50,16 @@ package com.example.security;
  *
  * KEYSTORES:
  * ==========
- *   client-keystore.jks   = client's private key (for signing)
- *   client-truststore.jks = server's public cert  (for encrypting TO server)
- *   server-keystore.jks   = server's private key  (for decrypting)
- *   server-truststore.jks = client's public cert  (for verifying client signatures)
+ *   client-keystore.p12   = client's private key (for signing)
+ *   client-truststore.p12 = server's public cert  (for encrypting TO server)
+ *   server-keystore.p12   = server's private key  (for decrypting)
+ *   server-truststore.p12 = client's public cert  (for verifying client signatures)
  */
 public class SecurityConstants {
 
     // --- Authentication credentials ---
-    public static final String USERNAME = "alice";
-    public static final String PASSWORD = "secret123";
+    public static final String USERNAME = env("SOAP_USERNAME", "alice");
+    public static final String PASSWORD = env("SOAP_PASSWORD", "secret123");
 
     // --- Keystore aliases (names of keys inside the keystores) ---
     public static final String CLIENT_KEY_ALIAS = "client";
@@ -67,8 +67,8 @@ public class SecurityConstants {
 
     // --- Keystore passwords ---
     // In production: load from environment variables, HashiCorp Vault, etc.
-    public static final String CLIENT_KEY_PASSWORD = "clientpass";
-    public static final String SERVER_KEY_PASSWORD = "serverpass";
+    public static final String CLIENT_KEY_PASSWORD = env("SOAP_CLIENT_KEY_PASSWORD", "clientpass");
+    public static final String SERVER_KEY_PASSWORD = env("SOAP_SERVER_KEY_PASSWORD", "serverpass");
 
     // --- Crypto properties files (tell WSS4J where the keystores are) ---
     public static final String CLIENT_CRYPTO_PROPERTIES = "client-crypto.properties";
@@ -77,4 +77,9 @@ public class SecurityConstants {
     // --- WS-Security XML namespace (for hand-written UsernameToken code) ---
     public static final String WSSE_NS = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
     public static final String WSSE_PREFIX = "wsse";
+
+    private static String env(String name, String fallback) {
+        String value = System.getenv(name);
+        return (value == null || value.isBlank()) ? fallback : value;
+    }
 }

@@ -1,6 +1,15 @@
 package com.example.service;
 
 import jakarta.jws.WebService;
+import org.apache.cxf.annotations.SchemaValidation;
+import org.apache.cxf.annotations.SchemaValidation.SchemaValidationType;
+import jakarta.xml.soap.SOAPConstants;
+import jakarta.xml.soap.SOAPException;
+import jakarta.xml.soap.SOAPFactory;
+import jakarta.xml.soap.SOAPFault;
+import jakarta.xml.ws.soap.SOAPFaultException;
+
+import javax.xml.namespace.QName;
 
 /**
  * SOAP Web Service Implementation (SIB - Service Implementation Bean)
@@ -26,6 +35,7 @@ import jakarta.jws.WebService;
     portName = "CalculatorPort",
     targetNamespace = "http://service.example.com/"
 )
+@SchemaValidation(type = SchemaValidationType.BOTH)
 public class CalculatorServiceImpl implements CalculatorService {
 
     @Override
@@ -56,10 +66,28 @@ public class CalculatorServiceImpl implements CalculatorService {
     public double divide(int a, int b) {
         System.out.println("Server: Received divide request - a=" + a + ", b=" + b);
         if (b == 0) {
-            throw new ArithmeticException("Cannot divide by zero!");
+            throw createSoapFault("Cannot divide by zero!", "DIVIDE_BY_ZERO");
         }
         double result = (double) a / b;
         System.out.println("Server: Returning result = " + result);
         return result;
+    }
+
+    /**
+     * Create a SOAP Fault that is visible to clients.
+     */
+    private SOAPFaultException createSoapFault(String message, String code) {
+        try {
+            SOAPFault fault = SOAPFactory.newInstance().createFault(
+                    message,
+                    new QName(SOAPConstants.URI_NS_SOAP_ENVELOPE, "Client")
+            );
+            fault.addDetail()
+                    .addDetailEntry(new QName("http://service.example.com/", "error"))
+                    .addTextNode(code);
+            return new SOAPFaultException(fault);
+        } catch (SOAPException e) {
+            throw new RuntimeException("Failed to create SOAP Fault", e);
+        }
     }
 }

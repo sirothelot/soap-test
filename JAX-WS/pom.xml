@@ -75,6 +75,19 @@
             <version>4.0.5</version>
         </dependency>
 
+
+        <!--
+            SLF4J Simple logging backend.
+            CXF and WSS4J use SLF4J for logging. Without a backend, you get:
+              SLF4J(W): No SLF4J providers were found.
+            This adds a simple console logger that prints WARN and above.
+        -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.13</version>
+        </dependency>
+
         <!-- JAXB for XML binding (required for Java 11+) -->
         <dependency>
             <groupId>jakarta.xml.bind</groupId>

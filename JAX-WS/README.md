@@ -1,6 +1,8 @@
 # JAX-WS SOAP Web Service Demo
 
 This project demonstrates how SOAP web services work using Java and JAX-WS (Jakarta XML Web Services).
+It uses **Apache CXF** as the runtime so WS-Security encryption can be processed
+before request dispatch.
 
 ## What is SOAP?
 
@@ -61,8 +63,8 @@ JAX-WS/
     │   └── CalculatorServiceImpl.java # Service Implementation
     ├── security/
     │   ├── SecurityConstants.java     # Shared credentials
-    │   ├── ClientSecurityHandler.java # Adds UsernameToken to requests
-    │   └── ServerSecurityHandler.java # Validates UsernameToken on server
+    │   ├── ClientPasswordCallbackHandler.java # Supplies passwords for WSS4J
+    │   └── ServerPasswordCallbackHandler.java # Supplies passwords for WSS4J
     ├── server/
     │   └── SoapServer.java            # Publishes the web service
     └── client/
@@ -73,7 +75,7 @@ JAX-WS/
 
 ### Prerequisites
 
-- Java 11 or higher
+- Java 21 or higher
 - Maven 3.6 or higher
 
 ### Step 1: Build the Project
@@ -84,6 +86,14 @@ JAX-WS/
 
 # On Windows (CMD) / Linux / Mac (if Maven is installed)
 mvn clean compile
+```
+
+### Step 1.5: Generate Keystores (required for WS-Security)
+
+Keystores are not committed to the repo. Generate them once after cloning:
+
+```bash
+..\generate-keystores.ps1
 ```
 
 ### Step 2: Start the Server
@@ -231,9 +241,9 @@ When you call `calc.add(5, 3)`:
 
 All this XML handling is automatic!
 
-## WS-Security (UsernameToken)
+## WS-Security (UsernameToken + Signature + Encryption)
 
-This project includes a working WS-Security example that adds **username/password authentication** to every SOAP message.
+This project includes a working WS-Security example that adds authentication, message integrity, and confidentiality to every SOAP message.
 
 ### What is WS-Security?
 
@@ -243,41 +253,163 @@ WS-Security is a standard for adding security **inside** the SOAP message itself
 <S:Envelope>
   <S:Header>
     <wsse:Security>
-      <wsse:UsernameToken>
-        <wsse:Username>alice</wsse:Username>
-        <wsse:Password>secret123</wsse:Password>
-      </wsse:UsernameToken>
+      <wsse:UsernameToken>...</wsse:UsernameToken>
+      <ds:Signature>...</ds:Signature>
+      <xenc:EncryptedData>...</xenc:EncryptedData>
     </wsse:Security>
   </S:Header>
-  <S:Body>
-    <add><a>5</a><b>3</b></add>
-  </S:Body>
+  <S:Body>...</S:Body>
 </S:Envelope>
 ```
 
-### How It Works in JAX-WS
+### How It Works in JAX-WS (CXF + WSS4J)
 
-JAX-WS uses **SOAPHandler** classes that intercept messages in a handler chain:
+This project uses **Apache CXF** as the JAX-WS runtime. CXF wires **WSS4J interceptors**
+into the request/response pipeline, so security happens **before** the message is dispatched.
 
 ```
 Client                          Server
   │                               │
-  │  ClientSecurityHandler        │  ServerSecurityHandler
-  │  adds <wsse:Security>         │  reads <wsse:Security>
-  │  header to outgoing     ───►  │  header from incoming
-  │  messages                     │  messages, validates
-  │                               │  username/password
+  │  WSS4JOutInterceptor           │  WSS4JInInterceptor
+  │  adds UsernameToken            │  decrypts + verifies
+  │  signs + encrypts        ───►  │  validates credentials
+  │                               │  then dispatches
 ```
 
-| File                         | Role                                         |
-| ---------------------------- | -------------------------------------------- |
-| `SecurityConstants.java`     | Shared credentials (username, password)      |
-| `ClientSecurityHandler.java` | Builds & injects UsernameToken into requests |
-| `ServerSecurityHandler.java` | Extracts & validates UsernameToken on server |
+| File                                 | Role                                                            |
+| ------------------------------------ | --------------------------------------------------------------- |
+| `SecurityConstants.java`             | Shared credentials + keystore settings                          |
+| `ClientPasswordCallbackHandler.java` | Supplies passwords to WSS4J for UsernameToken + signing         |
+| `ServerPasswordCallbackHandler.java` | Supplies passwords to WSS4J for UsernameToken + decryption      |
+| `SoapClient.java`                    | Configures WSS4JOutInterceptor (UsernameToken + Sign + Encrypt) |
+| `SoapServer.java`                    | Configures WSS4JInInterceptor (Decrypt + Verify + Validate)     |
 
 ### Key Point
 
-In JAX-WS, you write the XML manipulation **by hand** (~200 lines of handler code). Compare this to Spring-WS, which does the same thing with ~15 lines of configuration using Apache WSS4J.
+CXF avoids the classic JAX-WS + encryption dispatch issue by decrypting **before** routing.
+Spring-WS solves the same problem with a custom endpoint mapping.
+
+## Raw SOAP Example (unencrypted)
+
+With security disabled, an `add(5,3)` request looks like this:
+
+```xml
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+  <S:Header/>
+  <S:Body>
+    <add xmlns="http://service.example.com/">
+      <a>5</a>
+      <b>3</b>
+    </add>
+  </S:Body>
+</S:Envelope>
+```
+
+In this demo, WSS4J adds a `<wsse:Security>` header and encrypts the body.
+
+## SOAP Fault Example (divide by zero)
+
+If you call `divide(10, 0)`, the server returns a SOAP Fault:
+
+```xml
+<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/">
+  <S:Body>
+    <S:Fault>
+      <faultcode>S:Client</faultcode>
+      <faultstring>Cannot divide by zero!</faultstring>
+      <detail>
+        <error xmlns="http://service.example.com/">DIVIDE_BY_ZERO</error>
+      </detail>
+    </S:Fault>
+  </S:Body>
+</S:Envelope>
+```
+
+## Validation + Logging + Timeouts
+
+- **Schema validation** is enabled via `@SchemaValidation` on
+  [JAX-WS/src/main/java/com/example/service/CalculatorServiceImpl.java](JAX-WS/src/main/java/com/example/service/CalculatorServiceImpl.java).
+- **SOAP logging** is enabled with CXF logging interceptors (server + client).
+- **Client timeouts** are set in
+  [JAX-WS/src/main/java/com/example/client/SoapClient.java](JAX-WS/src/main/java/com/example/client/SoapClient.java).
+
+## Configuration via Environment Variables
+
+You can override demo credentials without changing code:
+
+- `SOAP_USERNAME`
+- `SOAP_PASSWORD`
+- `SOAP_CLIENT_KEY_PASSWORD`
+- `SOAP_SERVER_KEY_PASSWORD`
+
+## Security Certificates in Production
+
+This demo uses **self-signed certificates** for simplicity. In production:
+
+- Use **CA-signed certificates** from a trusted Certificate Authority (e.g., Let's Encrypt, DigiCert)
+- The keystore/truststore setup is the same — you just replace the self-signed certs with CA-issued ones
+- Consider using a secrets manager (e.g., HashiCorp Vault, AWS Secrets Manager) instead of `.p12` files on disk
+
+## Code-First vs Contract-First
+
+This demo uses **code-first** (Java → WSDL) to contrast with Spring-WS's contract-first approach.
+However, JAX-WS fully supports **contract-first** via `wsimport`:
+
+```bash
+# Generate Java classes from an existing WSDL
+wsimport -keep -s src/main/java http://example.com/service?wsdl
+```
+
+This generates the service interface, JAXB types, and `Service` factory classes
+from a WSDL — useful when you're consuming a third-party SOAP service or when
+the schema is defined before the implementation.
+
+## What About MTOM?
+
+**MTOM (Message Transmission Optimization Mechanism)** is a SOAP standard for sending
+binary data (files, images, PDFs) efficiently as MIME attachments instead of Base64-encoding
+them into the XML body.
+
+Without MTOM, a 10 MB file gets Base64-encoded (+33% size) and embedded in the SOAP body.
+With MTOM, the binary data travels as a raw MIME attachment alongside the SOAP envelope:
+
+```
+MIME Boundary
+├── Part 1: SOAP Envelope (XML with <xop:Include href="cid:attachment"/>)
+└── Part 2: Binary data (raw bytes, no encoding overhead)
+```
+
+**In JAX-WS**, you enable MTOM with one annotation:
+
+```java
+@MTOM
+@WebService
+public class FileService {
+    @WebMethod
+    public void upload(@WebParam(name = "file") DataHandler file) { ... }
+}
+```
+
+This demo doesn't include MTOM because a calculator service has no binary data.
+MTOM is relevant for document management, file upload, or image processing services.
+
+### MTOM and Encryption
+
+MTOM attachments travel **outside** the SOAP XML envelope as separate MIME parts,
+so WS-Security XML Encryption (used in this demo) **does not cover them** — it only
+encrypts the XML body containing the `<xop:Include>` reference.
+
+Options for securing MTOM data:
+
+| Approach                         | Description                                                                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **TLS (HTTPS)**                  | Encrypt the entire HTTP connection — covers all MIME parts. Simplest and most common.                                             |
+| **Disable MTOM when encrypting** | Send everything inline as Base64 so encryption covers it.                                                                         |
+| **CXF attachment encryption**    | Configure `encryptionParts` to include `cid:Attachments` — encrypts MIME parts individually via the OASIS WSS Attachment Profile. |
+
+The recommended production approach is **HTTPS + WS-Security**: TLS handles
+transport confidentiality (including attachments), while WS-Security provides
+authentication, integrity, and non-repudiation at the message level.
 
 ## SOAP vs REST
 

@@ -11,13 +11,16 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.ws.config.annotation.EnableWs;
 import org.springframework.ws.config.annotation.WsConfigurerAdapter;
+import org.springframework.ws.server.EndpointInterceptor;
 import org.springframework.ws.server.endpoint.mapping.PayloadRootAnnotationMethodEndpointMapping;
 import org.springframework.ws.soap.security.wss4j2.Wss4jSecurityInterceptor;
+import org.springframework.ws.server.endpoint.interceptor.PayloadLoggingInterceptor;
 import org.springframework.ws.transport.http.MessageDispatcherServlet;
 import org.springframework.ws.wsdl.wsdl11.DefaultWsdl11Definition;
 import org.springframework.xml.xsd.SimpleXsdSchema;
 import org.springframework.xml.xsd.XsdSchema;
 
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -85,6 +88,33 @@ public class WebServiceConfig extends WsConfigurerAdapter {
     @Bean
     public XsdSchema calculatorSchema() {
         return new SimpleXsdSchema(new ClassPathResource("calculator.xsd"));
+    }
+
+    /**
+     * Payload logging for educational visibility.
+     *
+     * NOTE ON SCHEMA VALIDATION WITH ENCRYPTION:
+     * ===========================================
+     * PayloadValidatingInterceptor is NOT used here because it's incompatible
+     * with the DecryptingEndpointMapping flow. After WS-Security decryption,
+     * the DOM tree contains residual security artifacts that cause
+     * IndexOutOfBoundsException during XSD validation.
+     *
+     * Schema conformance is still enforced by:
+     *   1. JAXB unmarshalling (rejects invalid XML structure)
+     *   2. The XSD-generated WSDL (clients validate before sending)
+     *
+     * This is similar to JAX-WS/CXF where @SchemaValidation works because
+     * CXF's pipeline fully cleans up the DOM after decryption, whereas
+     * Spring-WS's interceptor-based approach doesn't.
+     */
+    @Override
+    public void addInterceptors(List<EndpointInterceptor> interceptors) {
+        PayloadLoggingInterceptor loggingInterceptor = new PayloadLoggingInterceptor();
+        loggingInterceptor.setLogRequest(true);
+        loggingInterceptor.setLogResponse(true);
+
+        interceptors.add(loggingInterceptor);
     }
 
     // =========================================================================
@@ -186,8 +216,8 @@ public class WebServiceConfig extends WsConfigurerAdapter {
      *
      * Loads crypto configuration from server-crypto.properties on the classpath.
      * This tells WSS4J where to find:
-     *   - server-keystore.jks   (server's private key, for decryption)
-     *   - server-truststore.jks (client's public cert, for signature verification)
+     *   - server-keystore.p12   (server's private key, for decryption)
+     *   - server-truststore.p12 (client's public cert, for signature verification)
      *
      * JAX-WS equivalent: CryptoFactory.getInstance(props) in the handler constructor.
      */

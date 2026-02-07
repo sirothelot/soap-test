@@ -115,7 +115,7 @@ public class CalculatorEndpoint {
     public DivideResponse divide(@RequestPayload DivideRequest request) {
         System.out.println("Server: Received divide request - a=" + request.getA() + ", b=" + request.getB());
         if (request.getB() == 0) {
-            throw new ArithmeticException("Cannot divide by zero!");
+            throw new DivisionByZeroException("Cannot divide by zero!");
         }
         double result = (double) request.getA() / request.getB();
         System.out.println("Server: Returning result = " + result);

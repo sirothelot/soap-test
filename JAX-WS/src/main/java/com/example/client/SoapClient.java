@@ -3,9 +3,16 @@ package com.example.client;
 import com.example.security.ClientPasswordCallbackHandler;
 import com.example.security.SecurityConstants;
 import com.example.service.CalculatorService;
+import org.apache.cxf.endpoint.Client;
+import org.apache.cxf.frontend.ClientProxy;
+import org.apache.cxf.interceptor.LoggingInInterceptor;
+import org.apache.cxf.interceptor.LoggingOutInterceptor;
 import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
+import org.apache.cxf.transport.http.HTTPConduit;
+import org.apache.cxf.transports.http.configuration.HTTPClientPolicy;
 import org.apache.cxf.ws.security.wss4j.WSS4JOutInterceptor;
 import org.apache.wss4j.dom.handler.WSHandlerConstants;
+import jakarta.xml.ws.soap.SOAPFaultException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -54,6 +61,10 @@ public class SoapClient {
             factory.setServiceClass(CalculatorService.class);
             factory.setAddress(SERVICE_URL);
 
+            // Log raw SOAP messages for learning/debugging
+            factory.getInInterceptors().add(new LoggingInInterceptor());
+            factory.getOutInterceptors().add(new LoggingOutInterceptor());
+
             // Step 2: Configure WS-Security for outgoing messages
             // =====================================================
             System.out.println("Step 2: Configuring WS-Security...");
@@ -78,7 +89,7 @@ public class SoapClient {
 
             // SIGNATURE: Which private key to sign with, and where to find it.
             //   SIG_PROP_FILE -> points to client-crypto.properties
-            //                    which points to client-keystore.jks
+            //                    which points to client-keystore.p12
             //   SIGNATURE_USER -> alias of the key in the keystore
             //
             // COMPARISON WITH SPRING-WS:
@@ -92,7 +103,7 @@ public class SoapClient {
 
             // ENCRYPTION: Which public key to encrypt FOR, and where to find it.
             //   ENC_PROP_FILE    -> points to client-crypto.properties
-            //                      which points to client-truststore.jks
+            //                      which points to client-truststore.p12
             //   ENCRYPTION_USER  -> alias of the server's cert in the truststore
             //
             // The message body will be encrypted with the server's public key.
@@ -118,6 +129,14 @@ public class SoapClient {
             // applies WS-Security (sign + encrypt), sends it, and parses the response.
             System.out.println("Step 3: Creating service proxy...");
             CalculatorService calculator = (CalculatorService) factory.create();
+
+            // Configure client timeouts (prevents long hangs in demos)
+            Client cxfClient = ClientProxy.getClient(calculator);
+            HTTPConduit conduit = (HTTPConduit) cxfClient.getConduit();
+            HTTPClientPolicy httpClientPolicy = new HTTPClientPolicy();
+            httpClientPolicy.setConnectionTimeout(5000);
+            httpClientPolicy.setReceiveTimeout(5000);
+            conduit.setClient(httpClientPolicy);
 
             System.out.println("[OK] Connected successfully!");
             System.out.println();
@@ -163,6 +182,26 @@ public class SoapClient {
 
             System.out.println("Calling: divide(22, 7)");
             System.out.println("Result:  " + calculator.divide(22, 7));
+            System.out.println();
+
+            // SOAP Fault demo: divide by zero
+            // The server throws a SOAPFaultException with faultcode=Client.
+            // This shows how SOAP reports errors — as structured XML Faults,
+            // not HTTP error codes like REST.
+            System.out.println("========================================");
+            System.out.println("   SOAP Fault Demo (divide by zero)");
+            System.out.println("========================================");
+            System.out.println();
+
+            System.out.println("Calling: divide(10, 0)");
+            try {
+                calculator.divide(10, 0);
+                System.out.println("ERROR: Should have thrown a SOAP Fault!");
+            } catch (SOAPFaultException e) {
+                System.out.println("[OK] Got expected SOAP Fault:");
+                System.out.println("  Fault code:   " + e.getFault().getFaultCode());
+                System.out.println("  Fault string: " + e.getFault().getFaultString());
+            }
             System.out.println();
 
             System.out.println("========================================");
