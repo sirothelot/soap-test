@@ -3,58 +3,78 @@ package com.example.security;
 /**
  * WS-Security Constants - shared between server and client.
  *
- * WHAT IS WS-SECURITY?
+ * THREE LAYERS OF WS-SECURITY IN THIS DEMO:
+ * ==========================================
+ *
+ * LAYER 1: AUTHENTICATION (UsernameToken)
+ *   "Who are you?" - proves identity with username/password.
+ *   The username and password are sent in the SOAP header.
+ *
+ *   <wsse:UsernameToken>
+ *     <wsse:Username>alice</wsse:Username>
+ *     <wsse:Password>secret123</wsse:Password>
+ *   </wsse:UsernameToken>
+ *
+ * LAYER 2: DIGITAL SIGNATURE
+ *   "Was this message tampered with?" - proves message integrity.
+ *   The sender signs the message body with their PRIVATE KEY.
+ *   The receiver verifies using the sender's PUBLIC KEY (from truststore).
+ *
+ *   If an intermediary changes even one character of the SOAP body,
+ *   the signature verification will FAIL and the message is rejected.
+ *
+ *   <ds:Signature>
+ *     <ds:SignedInfo>...</ds:SignedInfo>            (what was signed)
+ *     <ds:SignatureValue>ABC123...</ds:SignatureValue>  (the signature)
+ *     <ds:KeyInfo>...</ds:KeyInfo>                 (which key signed it)
+ *   </ds:Signature>
+ *
+ * LAYER 3: ENCRYPTION
+ *   "Can intermediaries read this?" - protects confidentiality.
+ *   The sender encrypts the SOAP body with the RECEIVER's PUBLIC KEY.
+ *   Only the receiver (who has the matching PRIVATE KEY) can decrypt it.
+ *
+ *   <xenc:EncryptedData>
+ *     <xenc:CipherData>
+ *       <xenc:CipherValue>...gibberish...</xenc:CipherValue>
+ *     </xenc:CipherData>
+ *   </xenc:EncryptedData>
+ *
+ * ORDER OF OPERATIONS:
  * ====================
- * WS-Security (WSS) is a standard for adding security to SOAP messages.
- * Unlike HTTPS (which secures the transport), WS-Security secures the
- * MESSAGE ITSELF by adding security information to the SOAP header.
+ *   Client sending:    1. Add UsernameToken  2. Sign  3. Encrypt
+ *   Server receiving:  1. Decrypt  2. Verify signature  3. Validate credentials
  *
- * WHY SECURE THE MESSAGE (NOT JUST THE TRANSPORT)?
- * ================================================
- * 1. HTTPS protects data in transit between two points.
- *    But SOAP messages can travel through intermediaries (proxies, ESBs).
- *    WS-Security protects the message end-to-end, even through middlemen.
+ *   (Encryption must be last so the signature is also encrypted,
+ *    preventing attackers from even seeing WHO signed the message.)
  *
- * 2. With WS-Security, you can:
- *    - Authenticate: Prove WHO is calling (UsernameToken, certificates)
- *    - Sign: Prove the message HASN'T BEEN TAMPERED with
- *    - Encrypt: Hide SENSITIVE PARTS of the message
- *    - Timestamp: Prevent REPLAY attacks (reusing old messages)
- *
- * USERNAMETOKEN (what this demo uses):
- * ====================================
- * The simplest WS-Security mechanism. The client adds a username and password
- * to the SOAP header. The server validates them before processing the request.
- *
- * A secured SOAP message looks like this:
- *
- *   <soap:Envelope>
- *     <soap:Header>
- *       <wsse:Security>                              <-- WS-Security header
- *         <wsse:UsernameToken>                       <-- Authentication info
- *           <wsse:Username>alice</wsse:Username>     <-- Who is calling
- *           <wsse:Password>secret123</wsse:Password> <-- Proof of identity
- *         </wsse:UsernameToken>
- *       </wsse:Security>
- *     </soap:Header>
- *     <soap:Body>
- *       <add><a>10</a><b>5</b></add>                 <-- The actual request
- *     </soap:Body>
- *   </soap:Envelope>
- *
- * IN PRODUCTION:
- * - Always use HTTPS + UsernameToken (never send passwords in plain text)
- * - Consider password digest (hashed) instead of plain text
- * - For higher security, use X.509 certificates instead of passwords
+ * KEYSTORES:
+ * ==========
+ *   client-keystore.jks   = client's private key (for signing)
+ *   client-truststore.jks = server's public cert  (for encrypting TO server)
+ *   server-keystore.jks   = server's private key  (for decrypting)
+ *   server-truststore.jks = client's public cert  (for verifying client signatures)
  */
 public class SecurityConstants {
 
-    // WS-Security XML namespace URIs
-    // These identify the WS-Security elements in the SOAP header
-    public static final String WSSE_NS = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
-    public static final String WSSE_PREFIX = "wsse";
-
-    // Demo credentials (in production, these come from a database, LDAP, etc.)
+    // --- Authentication credentials ---
     public static final String USERNAME = "alice";
     public static final String PASSWORD = "secret123";
+
+    // --- Keystore aliases (names of keys inside the keystores) ---
+    public static final String CLIENT_KEY_ALIAS = "client";
+    public static final String SERVER_KEY_ALIAS = "server";
+
+    // --- Keystore passwords ---
+    // In production: load from environment variables, HashiCorp Vault, etc.
+    public static final String CLIENT_KEY_PASSWORD = "clientpass";
+    public static final String SERVER_KEY_PASSWORD = "serverpass";
+
+    // --- Crypto properties files (tell WSS4J where the keystores are) ---
+    public static final String CLIENT_CRYPTO_PROPERTIES = "client-crypto.properties";
+    public static final String SERVER_CRYPTO_PROPERTIES = "server-crypto.properties";
+
+    // --- WS-Security XML namespace (for hand-written UsernameToken code) ---
+    public static final String WSSE_NS = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
+    public static final String WSSE_PREFIX = "wsse";
 }

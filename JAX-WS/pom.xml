@@ -19,18 +19,60 @@
     </properties>
 
     <dependencies>
-        <!-- JAX-WS API -->
+        <!--
+            Apache CXF - Enterprise-grade JAX-WS implementation.
+
+            WHY CXF INSTEAD OF METRO (jaxws-rt)?
+            =====================================
+            The JDK's built-in JAX-WS (Metro) works fine for basic SOAP services,
+            but it has a fundamental problem with WS-Security ENCRYPTION:
+
+            Metro determines which @WebService method to call by reading the
+            SOAP body's first element BEFORE handlers run. When the body is
+            encrypted, Metro sees <EncryptedData> instead of <add> and fails.
+
+            Apache CXF solves this with a proper INTERCEPTOR PIPELINE:
+              Phase 1: Receive raw message
+              Phase 2: WSS4J interceptor decrypts + verifies + authenticates
+              Phase 3: Dispatch to the correct @WebService method
+              Phase 4: Send response
+
+            CXF is the standard choice for enterprise SOAP in Java.
+            Spring-WS also uses WSS4J under the hood (same crypto engine).
+        -->
+
+        <!-- CXF JAX-WS frontend (provides @WebService support) -->
         <dependency>
-            <groupId>jakarta.xml.ws</groupId>
-            <artifactId>jakarta.xml.ws-api</artifactId>
-            <version>3.0.1</version>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-frontend-jaxws</artifactId>
+            <version>4.0.5</version>
         </dependency>
 
-        <!-- JAX-WS Runtime Implementation -->
+        <!-- CXF HTTP transport -->
         <dependency>
-            <groupId>com.sun.xml.ws</groupId>
-            <artifactId>jaxws-rt</artifactId>
-            <version>3.0.2</version>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-transports-http</artifactId>
+            <version>4.0.5</version>
+        </dependency>
+
+        <!-- CXF embedded Jetty server (for standalone Endpoint.publish) -->
+        <dependency>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-transports-http-jetty</artifactId>
+            <version>4.0.5</version>
+        </dependency>
+
+        <!--
+            CXF WS-Security module.
+            Brings in Apache WSS4J automatically.
+            Provides WSS4JInInterceptor / WSS4JOutInterceptor
+            that handle signing, encryption, and authentication
+            at the correct pipeline stage.
+        -->
+        <dependency>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-ws-security</artifactId>
+            <version>4.0.5</version>
         </dependency>
 
         <!-- JAXB for XML binding (required for Java 11+) -->

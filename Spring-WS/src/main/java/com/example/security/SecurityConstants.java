@@ -3,31 +3,42 @@ package com.example.security;
 /**
  * WS-Security Constants - shared between server and client.
  *
- * WHAT IS WS-SECURITY?
- * ====================
- * WS-Security (WSS) is a standard for adding security to SOAP messages.
- * Unlike HTTPS (which secures the transport), WS-Security secures the
- * MESSAGE ITSELF by adding security information to the SOAP header.
+ * THREE LAYERS OF WS-SECURITY IN THIS DEMO:
+ * ==========================================
  *
- * This class holds the demo credentials used by both the server
- * (for validation) and the client (for sending).
+ * LAYER 1: AUTHENTICATION (UsernameToken)
+ *   "Who are you?" - proves identity with username/password.
+ *
+ * LAYER 2: DIGITAL SIGNATURE
+ *   "Was this message tampered with?" - proves message integrity.
+ *   Uses the sender's PRIVATE KEY to sign, receiver's TRUSTSTORE to verify.
+ *
+ * LAYER 3: ENCRYPTION
+ *   "Can intermediaries read this?" - protects confidentiality.
+ *   Uses the receiver's PUBLIC KEY to encrypt, receiver's PRIVATE KEY to decrypt.
  *
  * COMPARISON WITH JAX-WS:
  * =======================
- * Both projects use the same credentials and the same WS-Security standard.
- * The difference is HOW the credentials are injected and validated:
- *
- * JAX-WS:    Hand-written SOAPHandler classes that build/parse XML manually.
- * Spring-WS: Wss4jSecurityInterceptor configured via properties (no XML code needed).
- *
- * IN PRODUCTION:
- * - Credentials come from a database, LDAP, or identity provider
- * - Passwords should be hashed (password digest) not sent in plain text
- * - Always use HTTPS in addition to WS-Security
+ * Both projects use the SAME constants, keystores, and WSS4J library.
+ * The difference is HOW the security is wired:
+ *   JAX-WS:    SOAPHandler classes call WSS4J API directly (~150 lines)
+ *   Spring-WS: Wss4jSecurityInterceptor configured via properties (~15 lines)
  */
 public class SecurityConstants {
 
-    // Demo credentials (same as the JAX-WS project for comparison)
+    // --- Authentication credentials ---
     public static final String USERNAME = "alice";
     public static final String PASSWORD = "secret123";
+
+    // --- Keystore aliases (names of keys inside the keystores) ---
+    public static final String CLIENT_KEY_ALIAS = "client";
+    public static final String SERVER_KEY_ALIAS = "server";
+
+    // --- Keystore passwords ---
+    public static final String CLIENT_KEY_PASSWORD = "clientpass";
+    public static final String SERVER_KEY_PASSWORD = "serverpass";
+
+    // --- Crypto properties files ---
+    public static final String CLIENT_CRYPTO_PROPERTIES = "client-crypto.properties";
+    public static final String SERVER_CRYPTO_PROPERTIES = "server-crypto.properties";
 }

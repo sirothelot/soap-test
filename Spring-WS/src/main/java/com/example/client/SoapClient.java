@@ -2,6 +2,8 @@ package com.example.client;
 
 import com.example.security.SecurityConstants;
 import com.example.service.gen.*;
+import org.apache.wss4j.common.crypto.Crypto;
+import org.apache.wss4j.common.crypto.CryptoFactory;
 import org.springframework.oxm.jaxb.Jaxb2Marshaller;
 import org.springframework.ws.client.core.WebServiceTemplate;
 import org.springframework.ws.client.support.interceptor.ClientInterceptor;
@@ -63,29 +65,100 @@ public class SoapClient {
             template.setDefaultUri(SERVICE_URL);
 
             // Step 3: Add WS-Security to outgoing requests
-            // This interceptor automatically adds a <wsse:Security> header
-            // with our username and password to every SOAP message we send.
+            // This interceptor automatically adds three security layers:
+            //   1. UsernameToken (authentication - who is calling)
+            //   2. Digital Signature (integrity - proves message wasn't tampered)
+            //   3. Encryption (confidentiality - prevents reading by intermediaries)
             //
             // COMPARISON WITH JAX-WS:
             // =======================
-            // JAX-WS:    Write a ClientSecurityHandler that manually builds
-            //            <wsse:Security> XML elements (~100 lines of code).
-            // Spring-WS: Configure a Wss4jSecurityInterceptor with 3 properties.
-            //            WSS4J builds the XML header automatically.
+            // JAX-WS ClientSecurityHandler:
+            //   - Create WSSecHeader, WSSecUsernameToken, WSSecSignature, WSSecEncrypt
+            //   - Call build() on each one, passing the Crypto object
+            //   - ~80 lines of WSS4J API calls
+            //
+            // Spring-WS (below):
+            //   - Set securementActions and a few properties
+            //   - ~15 lines of configuration
+            //   - Spring-WS calls the same WSS4J classes under the hood
             //
             // "securementActions" = what to ADD to outgoing messages:
             //   "UsernameToken" = add username/password header
-            //   "Timestamp"     = add timestamp (server can reject old messages)
-            //   "Signature"     = digitally sign the message
+            //   "Signature"     = digitally sign the message body
             //   "Encrypt"       = encrypt the message body
-            System.out.println("Step 3: Configuring WS-Security credentials...");
+            System.out.println("Step 3: Configuring WS-Security (UsernameToken + Signature + Encryption)...");
+
+            // Load client crypto from properties file.
+            // This loads BOTH the keystore (for signing) and truststore (for encrypting).
+            // CryptoFactory reads client-crypto.properties which specifies:
+            //   - keystore file/password/alias (client's private key for signing)
+            //   - truststore file/password (server's public cert for encrypting)
+            //
+            // COMPARISON WITH JAX-WS (CXF):
+            //   CXF:       SIG_PROP_FILE = "client-crypto.properties"  (string property)
+            //   Spring-WS: CryptoFactory.getInstance("client-crypto.properties")  (Java object)
+            //   Both use the SAME properties file format and the SAME WSS4J Crypto engine.
+            Crypto clientCrypto = CryptoFactory.getInstance(SecurityConstants.CLIENT_CRYPTO_PROPERTIES);
+
             Wss4jSecurityInterceptor securityInterceptor = new Wss4jSecurityInterceptor();
-            securityInterceptor.setSecurementActions("UsernameToken");
+
+            // What security actions to apply to outgoing messages
+            securityInterceptor.setSecurementActions("UsernameToken Signature Encrypt");
+
+            // UsernameToken: credentials to send
             securityInterceptor.setSecurementUsername(SecurityConstants.USERNAME);
-            securityInterceptor.setSecurementPassword(SecurityConstants.PASSWORD);
+
+            // PASSWORD HANDLING - A KEY DIFFERENCE FROM JAX-WS (CXF):
+            // ========================================================
+            // Spring-WS's Wss4jSecurityInterceptor has setSecurementPassword()
+            // which sets ONE password for ALL outgoing security actions.
+            //
+            // PROBLEM: When using BOTH UsernameToken AND Signature, WSS4J needs
+            // TWO different passwords:
+            //   - UsernameToken: alice's credential ("secret123")
+            //   - Signature:     client private key password ("clientpass")
+            //
+            // SOLUTION: We use a PasswordCallbackInterceptor (runs BEFORE this
+            // security interceptor) that places a PW_CALLBACK_REF on the
+            // MessageContext. WSS4J finds this callback handler and calls it
+            // for each security action with the appropriate identifier:
+            //   - For UsernameToken: id="alice"   -> returns "secret123"
+            //   - For Signature:     id="client"  -> returns "clientpass"
+            //
+            // WHY THIS WORKS:
+            //   WSHandler.getPasswordCallbackHandler() checks:
+            //     1. handler options for PW_CALLBACK_REF  (not accessible)
+            //     2. MessageContext for PW_CALLBACK_REF   (our interceptor sets this!)
+            //     3. handler options for PW_CALLBACK_CLASS (not accessible)
+            //   When found, WSS4J uses our handler INSTEAD of the single password.
+            //
+            // JAX-WS (CXF) COMPARISON:
+            //   CXF:       properties.put(PW_CALLBACK_CLASS, handler.class.getName())
+            //   Spring-WS: PasswordCallbackInterceptor sets PW_CALLBACK_REF on MessageContext
+            //   Both route to the SAME WSS4J CallbackHandler mechanism!
+            // Signature: sign with client's private key
+            //   "DirectReference" means the signed message includes the full X.509
+            //   certificate, so the server can verify immediately without a lookup.
+            securityInterceptor.setSecurementSignatureUser(SecurityConstants.CLIENT_KEY_ALIAS);
+            securityInterceptor.setSecurementSignatureKeyIdentifier("DirectReference");
+            securityInterceptor.setSecurementSignatureCrypto(clientCrypto);
+
+            // Encryption: encrypt with server's public key (from client-truststore)
+            //   ENCRYPTION_USER = alias of the server's cert in our truststore.
+            //   The body will be encrypted so only the server can read it.
+            securityInterceptor.setSecurementEncryptionUser(SecurityConstants.SERVER_KEY_ALIAS);
+            securityInterceptor.setSecurementEncryptionCrypto(clientCrypto);
+
             securityInterceptor.afterPropertiesSet();
 
-            template.setInterceptors(new ClientInterceptor[]{securityInterceptor});
+            // INTERCEPTOR CHAIN ORDER MATTERS!
+            // The PasswordCallbackInterceptor MUST run BEFORE the Wss4jSecurityInterceptor.
+            // It places a PW_CALLBACK_REF on the MessageContext, which WSS4J then picks up
+            // when the security interceptor processes the outgoing message.
+            template.setInterceptors(new ClientInterceptor[]{
+                    new PasswordCallbackInterceptor(),  // 1st: injects callback handler
+                    securityInterceptor                 // 2nd: applies security (uses the handler)
+            });
 
             System.out.println("[OK] Connected successfully!");
             System.out.println();

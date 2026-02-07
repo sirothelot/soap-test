@@ -1,6 +1,9 @@
 package com.example.config;
 
 import com.example.security.SecurityConstants;
+import com.example.security.ServerPasswordCallbackHandler;
+import org.apache.wss4j.common.crypto.Crypto;
+import org.apache.wss4j.common.crypto.CryptoFactory;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -8,15 +11,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.ws.config.annotation.EnableWs;
 import org.springframework.ws.config.annotation.WsConfigurerAdapter;
-import org.springframework.ws.server.EndpointInterceptor;
+import org.springframework.ws.server.endpoint.mapping.PayloadRootAnnotationMethodEndpointMapping;
 import org.springframework.ws.soap.security.wss4j2.Wss4jSecurityInterceptor;
-import org.springframework.ws.soap.security.wss4j2.callback.SimplePasswordValidationCallbackHandler;
 import org.springframework.ws.transport.http.MessageDispatcherServlet;
 import org.springframework.ws.wsdl.wsdl11.DefaultWsdl11Definition;
 import org.springframework.xml.xsd.SimpleXsdSchema;
 import org.springframework.xml.xsd.XsdSchema;
 
-import java.util.List;
 import java.util.Properties;
 
 /**
@@ -88,86 +89,114 @@ public class WebServiceConfig extends WsConfigurerAdapter {
 
     // =========================================================================
     //  WS-SECURITY CONFIGURATION
+    //  Three layers: UsernameToken + Signature + Encryption
     // =========================================================================
 
     /**
-     * Register the WS-Security interceptor in the endpoint chain.
+     * Custom endpoint mapping that decrypts BEFORE resolving the endpoint.
      *
-     * COMPARISON WITH JAX-WS:
-     * =======================
-     * JAX-WS:    Handlers are added to a Binding's handler chain manually.
-     *              Binding binding = endpoint.getBinding();
-     *              binding.getHandlerChain().add(new ServerSecurityHandler());
+     * IMPORTANT - WHY addInterceptors() WON'T WORK WITH ENCRYPTION:
+     * ==============================================================
+     * Spring-WS resolves the endpoint FIRST by looking at the SOAP body's
+     * root element (via @PayloadRoot). But with encryption, the body is
+     * <EncryptedData> — NOT <addRequest>. So no endpoint matches, and
+     * Spring-WS returns a 404 before interceptors ever run.
      *
-     * Spring-WS: Interceptors are registered by overriding addInterceptors().
-     *            Spring automatically applies them to all @Endpoint methods.
+     * This is the SAME problem JAX-WS had with Metro (we had to switch to CXF).
+     *
+     * THE FIX: A custom EndpointMapping (DecryptingEndpointMapping) that:
+     *   1. Has HIGHEST PRIORITY (runs before PayloadRootAnnotationMethodEndpointMapping)
+     *   2. Calls securityInterceptor.handleRequest() to decrypt the body
+     *   3. Delegates to PayloadRootAnnotationMethodEndpointMapping to find the endpoint
+     *   4. Returns the endpoint with a response-only interceptor for signing the reply
+     *
+     * COMPARISON WITH JAX-WS (CXF):
+     *   CXF uses an interceptor pipeline: decrypt -> dispatch -> process
+     *   Spring-WS uses custom mapping:    decrypt -> delegate -> resolve
+     *   Both solve the same problem: body must be readable before routing.
+     *
+     * See DecryptingEndpointMapping.java for the full explanation.
      */
-    @Override
-    public void addInterceptors(List<EndpointInterceptor> interceptors) {
-        interceptors.add(securityInterceptor());
+    @Bean
+    public DecryptingEndpointMapping decryptingEndpointMapping(
+            Wss4jSecurityInterceptor securityInterceptor,
+            PayloadRootAnnotationMethodEndpointMapping payloadRootAnnotationMethodEndpointMapping) {
+        return new DecryptingEndpointMapping(securityInterceptor, payloadRootAnnotationMethodEndpointMapping);
     }
 
     /**
-     * WS-Security Interceptor (server-side) - validates incoming credentials.
+     * WS-Security Interceptor (server-side) - Decrypt + Verify + Authenticate.
      *
-     * This is the Spring-WS equivalent of our JAX-WS ServerSecurityHandler,
-     * but instead of manually parsing XML, we just set properties:
+     * This single bean replaces the entire ServerSecurityHandler.java from JAX-WS.
      *
-     * COMPARISON:
-     * ===========
-     * JAX-WS (ServerSecurityHandler.java):
-     *   - Manually iterates through SOAP header elements
-     *   - Finds <wsse:Security> -> <wsse:UsernameToken> -> <wsse:Username>/<wsse:Password>
-     *   - Compares values against expected credentials
-     *   - ~130 lines of XML parsing code
+     * COMPARISON WITH JAX-WS:
+     * =======================
+     * JAX-WS (CXF):
+     *   - Configure WSS4JInInterceptor with properties
+     *   - Write a CallbackHandler class
+     *   - ~30 lines of configuration
      *
      * Spring-WS (this bean):
-     *   - Set validationActions = "UsernameToken"
-     *   - Provide a callback handler with valid username/password pairs
-     *   - WSS4J handles ALL the XML parsing automatically
-     *   - ~15 lines of configuration code
+     *   - Set validationActions, crypto, and callback handler
+     *   - ~15 lines of configuration
+     *   - Spring-WS calls WSSecurityEngine for you under the hood
      *
      * WHAT "validationActions" MEANS:
-     *   "UsernameToken" = check for username/password in the security header
-     *   "Timestamp"     = check for timestamp (prevents replay attacks)
-     *   "Signature"     = verify digital signature
-     *   "Encrypt"       = decrypt encrypted content
-     *   You can combine them: "UsernameToken Timestamp"
+     *   These are the security operations to EXPECT in incoming messages.
+     *   The server says "I expect these actions, reject if missing."
+     *
+     *   "UsernameToken" = expect and validate username/password
+     *   "Signature"     = expect and verify digital signature
+     *   "Encrypt"       = expect and decrypt encrypted content
+     *
+     *   Order matters: WSS4J processes them RIGHT-TO-LEFT in the XML,
+     *   so "UsernameToken Signature Encrypt" means:
+     *     1. Decrypt first  2. Verify signature  3. Check credentials
      */
     @Bean
-    public Wss4jSecurityInterceptor securityInterceptor() {
+    public Wss4jSecurityInterceptor securityInterceptor() throws Exception {
         Wss4jSecurityInterceptor interceptor = new Wss4jSecurityInterceptor();
 
-        // Tell WSS4J to look for a UsernameToken in incoming messages
-        interceptor.setValidationActions("UsernameToken");
+        // --- INBOUND (validating incoming messages) ---
+        // Tell WSS4J to expect all three security layers
+        interceptor.setValidationActions("UsernameToken Signature Encrypt");
 
-        // Provide the callback handler that knows valid username/password pairs
-        interceptor.setValidationCallbackHandler(securityCallbackHandler());
+        // Callback handler for UsernameToken validation + decryption key access.
+        //
+        // KEY FIX: We use our own ServerPasswordCallbackHandler instead of
+        // Spring-WS's SimplePasswordValidationCallbackHandler. The Simple handler
+        // only supports USERNAME_TOKEN usage, but decryption requires DECRYPT usage
+        // to unlock the server's private key.
+        //
+        // Our handler handles BOTH:
+        //   - USERNAME_TOKEN (id="alice") -> returns "secret123"
+        //   - DECRYPT (id="server")      -> returns "serverpass"
+        interceptor.setValidationCallbackHandler(new ServerPasswordCallbackHandler());
+
+        // Crypto for SIGNATURE VERIFICATION (needs client's public cert from truststore)
+        // and DECRYPTION (needs server's private key from keystore)
+        interceptor.setValidationSignatureCrypto(serverCrypto());
+        interceptor.setValidationDecryptionCrypto(serverCrypto());
 
         return interceptor;
     }
 
     /**
-     * Password validation callback handler.
+     * Server-side Crypto bean.
      *
-     * When WSS4J finds a UsernameToken in an incoming message, it calls this
-     * callback to check if the credentials are valid.
+     * Loads crypto configuration from server-crypto.properties on the classpath.
+     * This tells WSS4J where to find:
+     *   - server-keystore.jks   (server's private key, for decryption)
+     *   - server-truststore.jks (client's public cert, for signature verification)
      *
-     * SimplePasswordValidationCallbackHandler takes a Properties object
-     * where keys=usernames, values=passwords.
-     *
-     * JAX-WS equivalent: The if-statement in ServerSecurityHandler.handleMessage()
-     *   that compares username.equals("alice") && password.equals("secret123")
-     *
-     * IN PRODUCTION: Replace this with a callback handler that checks
-     * a database, LDAP, or calls an identity provider.
+     * JAX-WS equivalent: CryptoFactory.getInstance(props) in the handler constructor.
      */
     @Bean
-    public SimplePasswordValidationCallbackHandler securityCallbackHandler() {
-        SimplePasswordValidationCallbackHandler handler = new SimplePasswordValidationCallbackHandler();
-        Properties users = new Properties();
-        users.setProperty(SecurityConstants.USERNAME, SecurityConstants.PASSWORD);
-        handler.setUsers(users);
-        return handler;
+    public Crypto serverCrypto() throws Exception {
+        Properties props = new Properties();
+        props.load(getClass().getClassLoader()
+                .getResourceAsStream(SecurityConstants.SERVER_CRYPTO_PROPERTIES));
+        return CryptoFactory.getInstance(props);
     }
+
 }
